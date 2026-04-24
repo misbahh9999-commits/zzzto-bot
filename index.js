@@ -8,7 +8,7 @@ const QRCode = require("qrcode-terminal");
 
 // ===== CONFIG =====
 const BOT_NAME = "ZZZTO BOT";
-const owner = "6285779697469"; // GANTI NOMOR KAMU
+const owner = "6285779697469"; // GANTI NOMOR KAMU (tanpa +)
 
 let vipUsers = [owner];
 let userLimit = {};
@@ -31,11 +31,13 @@ async function startBot() {
 
     // ===== CONNECTION =====
     sock.ev.on("connection.update", (update) => {
+        console.log("UPDATE MASUK:", update); // DEBUG
+
         const { connection, lastDisconnect, qr } = update;
 
-        // tampilkan QR
+        // QR muncul
         if (qr) {
-            console.log("📱 Scan QR ini:");
+            console.log("📱 QR TERDETEKSI, scan sekarang!");
             QRCode.generate(qr, { small: true });
         }
 
@@ -44,13 +46,15 @@ async function startBot() {
             console.log(`✅ ${BOT_NAME} CONNECTED`);
         }
 
-        // reconnect
+        // reconnect kalau putus
         if (connection === "close") {
+            console.log("❌ DISCONNECTED");
+
             const shouldReconnect =
                 lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
 
             if (shouldReconnect) {
-                console.log("🔄 Reconnecting...");
+                console.log("🔄 RECONNECT...");
                 startBot();
             }
         }
