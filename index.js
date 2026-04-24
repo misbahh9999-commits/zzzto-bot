@@ -1,13 +1,10 @@
-// ======================
-// EXPRESS SERVER
-// ======================
 const express = require("express");
 const app = express();
 
 app.use(express.json());
 
 // ======================
-// KEEP ALIVE SYSTEM
+// SYSTEM KEEP ALIVE
 // ======================
 let lastPing = Date.now();
 
@@ -30,39 +27,12 @@ app.get("/status", (req, res) => {
 });
 
 // ======================
-// VIP SYSTEM (MANUAL WHATSAPP ORDER)
+// VIP DATABASE (SIMPLE)
 // ======================
 let vipUsers = [];
 
-// OWNER NUMBER
-const ownerNumber = "6285779697469";
+const ownerNumber = "628xxxxxxxxxx";
 
-// BUY VIP (MANUAL PAYMENT VIA WHATSAPP)
-function buyVipMenu() {
-  return `
-💰 BUY VIP ZZZTO BOT
-
-📲 Silakan hubungi owner untuk pembelian VIP:
-
-wa.me/${ownerNumber}
-
-💳 Cara pembayaran:
-- Transfer manual ke owner
-- Kirim bukti pembayaran
-- VIP akan diaktifkan manual
-
-⚡ VIP aktif setelah konfirmasi owner
-`;
-}
-
-// ADD VIP (OWNER ONLY)
-function addVip(user) {
-  if (!vipUsers.includes(user)) {
-    vipUsers.push(user);
-  }
-}
-
-// CHECK VIP
 function isVip(user) {
   return vipUsers.includes(user);
 }
@@ -109,16 +79,74 @@ const aiMenu = `
 - @bot
 `;
 
-let menu = userMenu;
+const stickerMenu = `
+🎭 STICKER
+- !sticker
+- !toimg
+- !stikertext
+`;
 
-if (role === "vip") menu += vipMenu + aiMenu;
-if (role === "owner") menu += vipMenu + aiMenu + ownerMenu;
+const gameMenu = `
+🎮 GAME
+- !dadu
+- !coinflip
+- !suit
+`;
+
+const toolsMenu = `
+🛠 TOOLS
+- !calc
+- !base64
+- !hash
+`;
+
+const funMenu = `
+🎉 FUN
+- !joke
+- !quote
+- !pantun
+`;
+
+const qrisMenu = `
+💰 VIP ORDER
+- !buyvip (order via WhatsApp owner)
+`;
+
+let menu = userMenu + stickerMenu + gameMenu + toolsMenu + funMenu;
+
+if (role === "vip") menu += vipMenu + aiMenu + qrisMenu;
+if (role === "owner") menu += vipMenu + aiMenu + ownerMenu + qrisMenu;
 
 return menu;
 }
 
 // ======================
-// MESSAGE HANDLER (SIMPLIFIED)
+// VIP SYSTEM
+// ======================
+function addVip(user) {
+  if (!vipUsers.includes(user)) vipUsers.push(user);
+}
+
+// ======================
+// BUY VIP (MANUAL WHATSAPP)
+// ======================
+function buyVipMenu() {
+  return `
+💰 BUY VIP
+
+Hubungi owner:
+
+wa.me/${ownerNumber}
+
+💳 Pembayaran manual
+- Transfer ke owner
+- Kirim bukti
+- VIP diaktifkan manual
+`;
+}
+
+// ======================
+// MESSAGE HANDLER
 // ======================
 function onMessage(user, text) {
 
@@ -127,36 +155,39 @@ let role = "user";
 if (user === ownerNumber) role = "owner";
 else if (isVip(user)) role = "vip";
 
-// ======================
-// AUTO AI REPLY
-// ======================
+// AUTO AI
 if (text.includes("@bot")) {
-  return "🤖 Halo! ZZZTO BOT siap membantu 😊";
+  return "🤖 Halo! ZZZTO BOT siap membantu";
 }
 
-// ======================
 // MENU
-// ======================
 if (text === "!menu") {
   return getMenu(role);
 }
 
-// ======================
-// BUY VIP (WA ORDER SYSTEM)
-// ======================
+// BUY VIP
 if (text === "!buyvip") {
   return buyVipMenu();
 }
 
-// ======================
-// OWNER ADD VIP
-// ======================
+// ADD VIP (OWNER)
 if (text.startsWith("!addvip") && role === "owner") {
-  const userTarget = text.split(" ")[1];
-  addVip(userTarget);
-  return "✅ VIP berhasil ditambahkan";
+  const target = text.split(" ")[1];
+  addVip(target);
+  return "✅ VIP ditambahkan";
 }
 
+// STICKER
+if (text === "!sticker") {
+  return "📸 Sticker diproses...";
+}
+
+// AI
+if (text === "!ai") {
+  return "🧠 AI aktif...";
+}
+
+// DEFAULT
 return null;
 }
 
