@@ -4,7 +4,7 @@ const {
     DisconnectReason 
 } = require("@whiskeysockets/baileys");
 
-const fs = require("fs");
+const QRCode = require("qrcode-terminal");
 
 // ===== CONFIG =====
 const BOT_NAME = "ZZZTO BOT";
@@ -24,19 +24,27 @@ async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState("./session");
 
     const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: true
+        auth: state
     });
 
     sock.ev.on("creds.update", saveCreds);
 
+    // ===== CONNECTION =====
     sock.ev.on("connection.update", (update) => {
-        const { connection, lastDisconnect } = update;
+        const { connection, lastDisconnect, qr } = update;
 
+        // tampilkan QR
+        if (qr) {
+            console.log("📱 Scan QR ini:");
+            QRCode.generate(qr, { small: true });
+        }
+
+        // sukses connect
         if (connection === "open") {
             console.log(`✅ ${BOT_NAME} CONNECTED`);
         }
 
+        // reconnect
         if (connection === "close") {
             const shouldReconnect =
                 lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
