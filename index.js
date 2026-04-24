@@ -4,34 +4,26 @@ const {
     DisconnectReason 
 } = require("@whiskeysockets/baileys");
 
-const express = require("express");
+const fs = require("fs");
 
-const app = express();
-app.use(express.json());
-
-// ================= CONFIG BOT =================
+// ===== CONFIG =====
 const BOT_NAME = "ZZZTO BOT";
-const owner = "6285779697469"; // 🔥 GANTI NOMOR KAMU
+const owner = "6285779697469"; // GANTI NOMOR KAMU
 
-// VIP list (manual dulu, nanti bisa auto upgrade)
-let vipUsers = ["628xxxxxxxxxx"];
-
-// limit user
-let limitUser = {};
+let vipUsers = [owner];
+let userLimit = {};
 
 // reset limit tiap 24 jam
 setInterval(() => {
-    limitUser = {};
+    userLimit = {};
 }, 24 * 60 * 60 * 1000);
 
-// ================= BOT WA =================
-let sock;
-
+// ===== START BOT =====
 async function startBot() {
 
-    const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
+    const { state, saveCreds } = await useMultiFileAuthState("./session");
 
-    sock = makeWASocket({
+    const sock = makeWASocket({
         auth: state,
         printQRInTerminal: true
     });
@@ -46,15 +38,17 @@ async function startBot() {
         }
 
         if (connection === "close") {
-
             const shouldReconnect =
                 lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
 
-            if (shouldReconnect) startBot();
+            if (shouldReconnect) {
+                console.log("🔄 Reconnecting...");
+                startBot();
+            }
         }
     });
 
-    // ================= MESSAGE HANDLER =================
+    // ===== MESSAGE =====
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
         if (!msg.message) return;
@@ -66,22 +60,24 @@ async function startBot() {
             msg.message.conversation ||
             msg.message.extendedTextMessage?.text;
 
-        const isVIP = vipUsers.includes(sender) || sender === owner;
+        if (!text) return;
 
-        // ================= LIMIT SYSTEM =================
+        const isVIP = vipUsers.includes(sender);
+
+        // ===== LIMIT =====
         if (!isVIP) {
-            if (!limitUser[sender]) limitUser[sender] = 0;
+            if (!userLimit[sender]) userLimit[sender] = 0;
 
-            if (limitUser[sender] >= 20) {
+            if (userLimit[sender] >= 20) {
                 return sock.sendMessage(from, {
-                    text: "❌ Limit kamu habis (20/24 jam). Upgrade VIP untuk unlimited 💎"
+                    text: "❌ Limit habis (20/24 jam). Upgrade VIP 💎"
                 });
             }
 
-            limitUser[sender]++;
+            userLimit[sender]++;
         }
 
-        // ================= MENU =================
+        // ===== MENU =====
         if (text === "!menu") {
             return sock.sendMessage(from, {
                 text:
@@ -89,31 +85,30 @@ async function startBot() {
 
 👤 Owner: ${owner}
 
-Menu:
-- !menu
-- !ping
-- !limit
+📌 MENU:
+!menu
+!ping
+!limit
 
-Status:
-VIP: ${isVIP ? "ACTIVE 💎" : "FREE ❌"}
-Limit: ${isVIP ? "UNLIMITED" : limitUser[sender] + "/20"}`
+💎 VIP: ${isVIP ? "AKTIF" : "TIDAK"}
+📊 Limit: ${isVIP ? "UNLIMITED" : userLimit[sender] + "/20"}`
             });
         }
 
-        // ================= PING =================
+        // ===== PING =====
         if (text === "!ping") {
             return sock.sendMessage(from, { text: "PONG ⚡" });
         }
 
-        // ================= CEK LIMIT =================
+        // ===== CEK LIMIT =====
         if (text === "!limit") {
             return sock.sendMessage(from, {
-                text: `Limit kamu: ${isVIP ? "UNLIMITED 💎" : limitUser[sender] + "/20"}`
+                text: isVIP ? "VIP UNLIMITED 💎" : `Limit: ${userLimit[sender]}/20`
             });
         }
 
-        // ================= OWNER ADD VIP =================
-        if (sender === owner && text?.startsWith("!addvip ")) {
+        // ===== ADD VIP =====
+        if (sender === owner && text.startsWith("!addvip ")) {
             const num = text.split(" ")[1];
             vipUsers.push(num);
 
@@ -121,34 +116,17 @@ Limit: ${isVIP ? "UNLIMITED" : limitUser[sender] + "/20"}`
                 text: `✔ ${num} sekarang VIP 💎`
             });
         }
+
+        // ===== DEL VIP =====
+        if (sender === owner && text.startsWith("!delvip ")) {
+            const num = text.split(" ")[1];
+            vipUsers = vipUsers.filter(v => v !== num);
+
+            return sock.sendMessage(from, {
+                text: `❌ ${num} dihapus dari VIP`
+            });
+        }
     });
 }
 
 startBot();
-
-// ================= API UNTUK APK =================
-app.get("/api/wa/status", (req, res) => {
-    res.send(sock?.user ? "connected" : "not_connected");
-});
-
-app.post("/api/wa/send", async (req, res) => {
-    try {
-        const { number, message } = req.body;
-
-        await sock.sendMessage(number + "@s.whatsapp.net", {
-            text: message
-        });
-
-        res.send({ status: "success" });
-
-    } catch (e) {
-        res.send({ status: "error", msg: e.message });
-    }
-});
-
-// ================= SERVER =================
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-    console.log("🚀 ZZZTO BOT SERVER RUNNING");
-});
