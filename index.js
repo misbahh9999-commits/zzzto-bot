@@ -1,144 +1,169 @@
-const { 
-    default: makeWASocket, 
-    useMultiFileAuthState, 
-    DisconnectReason 
-} = require("@whiskeysockets/baileys");
+// ======================
+// EXPRESS SERVER
+// ======================
+const express = require("express");
+const app = express();
 
-const QRCode = require("qrcode-terminal");
+app.use(express.json());
 
-// ===== CONFIG =====
-const BOT_NAME = "ZZZTO BOT";
-const owner = "6285779697469"; // GANTI NOMOR KAMU (tanpa +)
+// ======================
+// KEEP ALIVE SYSTEM
+// ======================
+let lastPing = Date.now();
 
-let vipUsers = [owner];
-let userLimit = {};
+app.get("/", (req, res) => {
+  res.send("ZZZTO BOT ACTIVE");
+});
 
-// reset limit tiap 24 jam
-setInterval(() => {
-    userLimit = {};
-}, 24 * 60 * 60 * 1000);
+app.get("/ping", (req, res) => {
+  lastPing = Date.now();
+  res.send("pong");
+});
 
-// ===== START BOT =====
-async function startBot() {
+app.get("/status", (req, res) => {
+  const diff = Date.now() - lastPing;
 
-    const { state, saveCreds } = await useMultiFileAuthState("./session");
+  res.json({
+    online: diff < 10 * 60 * 1000,
+    inactiveMinutes: Math.floor(diff / 60000)
+  });
+});
 
-    const sock = makeWASocket({
-        auth: state
-    });
+// ======================
+// VIP SYSTEM (MANUAL WHATSAPP ORDER)
+// ======================
+let vipUsers = [];
 
-    sock.ev.on("creds.update", saveCreds);
+// OWNER NUMBER
+const ownerNumber = "6285779697469";
 
-    // ===== CONNECTION =====
-    sock.ev.on("connection.update", (update) => {
-        console.log("UPDATE MASUK:", update); // DEBUG
+// BUY VIP (MANUAL PAYMENT VIA WHATSAPP)
+function buyVipMenu() {
+  return `
+💰 BUY VIP ZZZTO BOT
 
-        const { connection, lastDisconnect, qr } = update;
+📲 Silakan hubungi owner untuk pembelian VIP:
 
-        // QR muncul
-        if (qr) {
-            console.log("📱 QR TERDETEKSI, scan sekarang!");
-            QRCode.generate(qr, { small: true });
-        }
+wa.me/${ownerNumber}
 
-        // sukses connect
-        if (connection === "open") {
-            console.log(`✅ ${BOT_NAME} CONNECTED`);
-        }
+💳 Cara pembayaran:
+- Transfer manual ke owner
+- Kirim bukti pembayaran
+- VIP akan diaktifkan manual
 
-        // reconnect kalau putus
-        if (connection === "close") {
-            console.log("❌ DISCONNECTED");
-
-            const shouldReconnect =
-                lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-
-            if (shouldReconnect) {
-                console.log("🔄 RECONNECT...");
-                startBot();
-            }
-        }
-    });
-
-    // ===== MESSAGE =====
-    sock.ev.on("messages.upsert", async ({ messages }) => {
-        const msg = messages[0];
-        if (!msg.message) return;
-
-        const from = msg.key.remoteJid;
-        const sender = from.replace("@s.whatsapp.net", "");
-
-        const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text;
-
-        if (!text) return;
-
-        const isVIP = vipUsers.includes(sender);
-
-        // ===== LIMIT =====
-        if (!isVIP) {
-            if (!userLimit[sender]) userLimit[sender] = 0;
-
-            if (userLimit[sender] >= 20) {
-                return sock.sendMessage(from, {
-                    text: "❌ Limit habis (20/24 jam). Upgrade VIP 💎"
-                });
-            }
-
-            userLimit[sender]++;
-        }
-
-        // ===== MENU =====
-        if (text === "!menu") {
-            return sock.sendMessage(from, {
-                text:
-`🤖 ${BOT_NAME}
-
-👤 Owner: ${owner}
-
-📌 MENU:
-!menu
-!ping
-!limit
-
-💎 VIP: ${isVIP ? "AKTIF" : "TIDAK"}
-📊 Limit: ${isVIP ? "UNLIMITED" : userLimit[sender] + "/20"}`
-            });
-        }
-
-        // ===== PING =====
-        if (text === "!ping") {
-            return sock.sendMessage(from, { text: "PONG ⚡" });
-        }
-
-        // ===== CEK LIMIT =====
-        if (text === "!limit") {
-            return sock.sendMessage(from, {
-                text: isVIP ? "VIP UNLIMITED 💎" : `Limit: ${userLimit[sender]}/20`
-            });
-        }
-
-        // ===== ADD VIP =====
-        if (sender === owner && text.startsWith("!addvip ")) {
-            const num = text.split(" ")[1];
-            vipUsers.push(num);
-
-            return sock.sendMessage(from, {
-                text: `✔ ${num} sekarang VIP 💎`
-            });
-        }
-
-        // ===== DEL VIP =====
-        if (sender === owner && text.startsWith("!delvip ")) {
-            const num = text.split(" ")[1];
-            vipUsers = vipUsers.filter(v => v !== num);
-
-            return sock.sendMessage(from, {
-                text: `❌ ${num} dihapus dari VIP`
-            });
-        }
-    });
+⚡ VIP aktif setelah konfirmasi owner
+`;
 }
 
-startBot();
+// ADD VIP (OWNER ONLY)
+function addVip(user) {
+  if (!vipUsers.includes(user)) {
+    vipUsers.push(user);
+  }
+}
+
+// CHECK VIP
+function isVip(user) {
+  return vipUsers.includes(user);
+}
+
+// ======================
+// MENU SYSTEM
+// ======================
+function getMenu(role) {
+
+const userMenu = `
+📋 UMUM USER
+- !menu
+- !ping
+- !info
+- !sticker
+- !myinfo
+- !afk
+- !quote
+- !buyvip
+`;
+
+const vipMenu = `
+👑 VIP MENU
+- !tagall
+- !hidetag
+- !groupinfo
+- !leaderboard
+- !shop
+`;
+
+const ownerMenu = `
+🔥 OWNER MENU
+- !addvip
+- !delvip
+- !restart
+- !broadcast
+- !eval
+`;
+
+const aiMenu = `
+🧠 AI
+- !ai
+- !chat
+- @bot
+`;
+
+let menu = userMenu;
+
+if (role === "vip") menu += vipMenu + aiMenu;
+if (role === "owner") menu += vipMenu + aiMenu + ownerMenu;
+
+return menu;
+}
+
+// ======================
+// MESSAGE HANDLER (SIMPLIFIED)
+// ======================
+function onMessage(user, text) {
+
+let role = "user";
+
+if (user === ownerNumber) role = "owner";
+else if (isVip(user)) role = "vip";
+
+// ======================
+// AUTO AI REPLY
+// ======================
+if (text.includes("@bot")) {
+  return "🤖 Halo! ZZZTO BOT siap membantu 😊";
+}
+
+// ======================
+// MENU
+// ======================
+if (text === "!menu") {
+  return getMenu(role);
+}
+
+// ======================
+// BUY VIP (WA ORDER SYSTEM)
+// ======================
+if (text === "!buyvip") {
+  return buyVipMenu();
+}
+
+// ======================
+// OWNER ADD VIP
+// ======================
+if (text.startsWith("!addvip") && role === "owner") {
+  const userTarget = text.split(" ")[1];
+  addVip(userTarget);
+  return "✅ VIP berhasil ditambahkan";
+}
+
+return null;
+}
+
+// ======================
+// START SERVER
+// ======================
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("ZZZTO BOT RUNNING");
+});
