@@ -4,59 +4,80 @@ const app = express();
 app.use(express.json());
 
 // ======================
-// KEEP ALIVE SYSTEM
-// ======================
-let lastPing = Date.now();
-
-app.get("/", (req, res) => {
-  res.send("ZZZTO BOT ACTIVE");
-});
-
-app.get("/ping", (req, res) => {
-  lastPing = Date.now();
-  res.send("pong");
-});
-
-app.get("/status", (req, res) => {
-  let diff = Date.now() - lastPing;
-
-  res.json({
-    status: "online",
-    idleMinutes: Math.floor(diff / 60000),
-    warning: diff > 5 * 60000
-  });
-});
-
-// ======================
-// VIP DATABASE (SIMPLE)
+// DATA SYSTEM
 // ======================
 let vipUsers = [];
+let limits = {};
+let stickerLimit = {};
 
-function isVip(user) {
-  return vipUsers.includes(user);
+const LIMIT_USER = 20;
+
+// ======================
+// ROLE
+// ======================
+function getRole(user) {
+  if (user === "OWNER_NUMBER") return "owner";
+  if (vipUsers.includes(user)) return "vip";
+  return "user";
 }
 
 // ======================
-// VIP API (FOR APK)
+// LIMIT SYSTEM
 // ======================
-app.get("/vip/list", (req, res) => {
-  res.json(vipUsers);
-});
+function useLimit(user, role) {
+  if (role !== "user") return true;
 
-app.post("/vip/add", (req, res) => {
-  vipUsers.push(req.body.number);
-  res.json({ success: true });
-});
+  if (!limits[user]) limits[user] = LIMIT_USER;
 
-app.post("/vip/remove", (req, res) => {
-  vipUsers = vipUsers.filter(v => v !== req.body.number);
-  res.json({ success: true });
-});
+  if (limits[user] <= 0) return false;
+
+  limits[user]--;
+  return true;
+}
 
 // ======================
-// MENU SYSTEM FULL
+// STICKER LIMIT
+// ======================
+function useStickerLimit(user, role) {
+  if (role !== "user") return true;
+
+  if (!stickerLimit[user]) stickerLimit[user] = 2;
+
+  if (stickerLimit[user] <= 0) return false;
+
+  stickerLimit[user]--;
+  return true;
+}
+
+// ======================
+// LOCK SYSTEM
+// ======================
+const vipOnly = [
+  "!ai","!chat","!ask",
+  "!ytmp3","!ytmp4","!tiktok",
+  "!slot","!casino",
+  "!tagall","!hidetag","!kick",
+  "!promote","!demote",
+  "!attp","!ttp","!stickerwm","!stickergif",
+  "!resize","!crop","!rotate","!removebg","!aiimage"
+];
+
+const ownerOnly = [
+  "!addvip","!delvip","!restart",
+  "!broadcast","!ban","!unban","!access"
+];
+
+// ======================
+// MENU
 // ======================
 function getMenu(role) {
+
+const header = `
+╭━━━〔 🤖 ZZZTO BOT 〕━━━⬣
+┃ 👤 Role: ${role.toUpperCase()}
+┃ ⚡ Status: Online
+╰━━━━━━━━━━━━━━━━━━⬣
+`;
 
 const userMenu = `
 📋 UMUM
@@ -65,87 +86,76 @@ const userMenu = `
 • !info
 • !owner
 • !limit
-• !hi
 • !waktu
-• !afk
 • !quote
 • !buyvip
-• !sticker
-• !toimg
 `;
 
 const toolsMenu = `
 🛠 TOOLS
 • !calc
-• !base64
-• !hash
 • !reverse
 • !upper
 • !lower
-• !length
 `;
 
-const waMenu = `
-💬 WHATSAPP
-• !tagall
-• !hidetag
-• !groupinfo
-• !welcome
-• !cek
-• !getpp
-• !qrgen
-• !stikertext
+const groupMenu = `
+👥 GROUP
+• !group open/close
+• !linkgroup
 `;
 
-const gameMenu = `
-🎮 GAME
-• !dadu
-• !coinflip
-• !suit
-• !pilih
-• !tebak
-`;
-
-const funMenu = `
-🎉 FUN
-• !joke
-• !quote
-• !fakta
-• !gombal
-• !bijak
-• !emoji
-• !pantun
-`;
-
-const stickerMenu = `
-🎭 STICKER
+const stickerUser = `
+🎭 STICKER (LIMIT 2)
 • !sticker
 • !toimg
-• !stikertext
-• !attp
-• !ttp
-• !emojimix
-• !stickermeme
+`;
+
+const locked = `
+🔒 VIP ONLY
+• !ai
+• !ytmp3
+• !tiktok
+• !kick
+• !tagall
 `;
 
 const vipMenu = `
 👑 VIP
-• !tagall
-• !hidetag
-• !groupinfo
-• !antilink
-• !shop
-• !leaderboard
-• !toplimit
-• !vipstatus
-`;
 
-const aiMenu = `
-🧠 AI
+🤖 AI
 • !ai
 • !chat
 • !ask
-• @bot
+
+📥 DOWNLOADER
+• !ytmp3
+• !ytmp4
+• !tiktok
+
+🎮 GAME
+• !slot
+• !casino
+
+🎨 IMAGE
+• !aiimage
+• !resize
+• !crop
+• !rotate
+• !removebg
+
+🎭 STICKER PRO
+• !attp
+• !ttp
+• !stickerwm
+• !stickergif
+
+👥 GROUP PRO
+• !tagall
+• !hidetag
+• !kick
+• !promote
+• !demote
 `;
 
 const ownerMenu = `
@@ -154,75 +164,97 @@ const ownerMenu = `
 • !delvip
 • !restart
 • !broadcast
-• !eval
-• !setname
-• !setbio
 • !ban
 • !unban
-• !mute
-• !unmute
+• !access
 `;
 
-const orderMenu = `
-💰 ORDER VIP
-• !buyvip
-• hubungi owner WhatsApp
+const footer = `
+╭━━━━━━━━━━━━━━━━━━⬣
+┃ 🔥 By Misbah Project
+╰━━━━━━━━━━━━━━━━━━⬣
 `;
 
-let menu = userMenu + toolsMenu + waMenu + gameMenu + funMenu + stickerMenu;
+let menu = header + userMenu + toolsMenu + groupMenu;
 
-if (role === "vip") menu += vipMenu + aiMenu + orderMenu;
-if (role === "owner") menu += vipMenu + aiMenu + ownerMenu + orderMenu;
+if (role === "user") {
+  menu += stickerUser + locked;
+}
 
-return menu;
+if (role === "vip") {
+  menu += vipMenu;
+}
+
+if (role === "owner") {
+  menu += vipMenu + ownerMenu;
+}
+
+return menu + footer;
 }
 
 // ======================
-// MESSAGE HANDLER (BOT LOGIC SIMULASI)
+// BOT LOGIC
 // ======================
 function onMessage(user, text) {
 
-let role = "user";
+let role = getRole(user);
 
-if (user === "OWNER_NUMBER") role = "owner";
-else if (isVip(user)) role = "vip";
+// LOCK OWNER
+if (ownerOnly.some(cmd => text.startsWith(cmd)) && role !== "owner") {
+  return "🚫 Fitur khusus OWNER!";
+}
 
-// AUTO AI TAG
-if (text.includes("@bot")) {
-  return "🤖 ZZZTO BOT siap membantu";
+// LOCK VIP
+if (vipOnly.some(cmd => text.startsWith(cmd)) && role === "user") {
+  return "🔒 Fitur khusus VIP!";
+}
+
+// LIMIT
+if (!useLimit(user, role)) {
+  return "⚠️ Limit harian habis (20)";
 }
 
 // MENU
-if (text === "!menu") {
-  return getMenu(role);
+if (text === "!menu") return getMenu(role);
+
+// STICKER
+if (text.startsWith("!sticker")) {
+  if (!useStickerLimit(user, role)) {
+    return "⚠️ Limit sticker habis (2)";
+  }
+  return "🎭 Sticker dibuat";
 }
 
-// BUY VIP
-if (text === "!buyvip") {
-  return "💰 Hubungi owner: wa.me/628xxxxxxxx";
-}
+// IMAGE
+if (text.startsWith("!aiimage")) return "🎨 AI membuat gambar...";
+if (text.startsWith("!resize")) return "📏 Resize gambar";
+if (text.startsWith("!crop")) return "✂️ Crop gambar";
+if (text.startsWith("!rotate")) return "🔄 Rotate gambar";
+if (text.startsWith("!removebg")) return "🧼 Remove background";
 
-// ADD VIP (OWNER)
+// AI
+if (text.startsWith("!ai")) return "🤖 AI menjawab...";
+
+// VIP ADD
 if (text.startsWith("!addvip") && role === "owner") {
-  vipUsers.push(text.split(" ")[1]);
+  let target = text.split(" ")[1];
+  vipUsers.push(target);
   return "✅ VIP ditambahkan";
 }
 
 // DEFAULT
-return null;
+return "OK";
 }
 
 // ======================
-// API SEND FROM APK
+// API
 // ======================
 app.post("/send", (req, res) => {
   const { user, text } = req.body;
 
   const reply = onMessage(user, text);
 
-  res.json({
-    reply: reply || "OK"
-  });
+  res.json({ reply });
 });
 
 // ======================
